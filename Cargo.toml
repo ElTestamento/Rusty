@@ -1,0 +1,12 @@
+[package]
+name = "world"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "terminal"
+path = "src/bin/terminal.rs"
+
+[dependencies]
+rand = "0.8"
+bevy = "0.12"

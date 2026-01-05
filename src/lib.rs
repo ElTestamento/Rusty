@@ -1,6 +1,6 @@
 use rand::seq::SliceRandom;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Particle {
     pub id: i32,
     pub position: [f32; 2],
@@ -14,10 +14,10 @@ impl Particle {
     pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32) -> Particle {
         println!("Erschaffe neues Partikel");
         Particle {
-            id,
-            position,
-            velocity,
-            mass,
+            id : id,
+            position : position,
+            velocity : velocity,
+            mass : mass,
             is_solid: false,
             block_id: None,
         }
@@ -208,26 +208,44 @@ pub struct Object {
     object_id : i32,
     position : [f32;2],
     velocity : [f32;2],
-    mass : f32,
-    is_solid: bool,
-    h : usize,
-    w : usize,
-    grid : Vec<Vec<(bool, f32, f32)>>,
+    total_object_mass : f32,
+    object_h : usize,
+    object_w : usize,
+    object_grid : Vec<Vec<(Particle, f32, f32)>>,
 
     }
 impl Object {
-    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, is_solid: bool, h: usize, w: usize) -> Object {
+    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, is_solid: bool, h: usize, w: usize, prtl : Particle) -> Object {
         println!("Erschaffe neues Objekt");
         Object {
             object_id: id,
             position: position,
             velocity: velocity,
-            mass: mass,
-            is_solid: is_solid,
-            h: h,
-            w: w,
-            grid: vec![vec![(false, 0.0, 0.0); w]; h],
+            total_object_mass: mass,
+            object_h: h,
+            object_w: w,
+            object_grid: vec![vec![(prtl, 0.0, 0.0); w]; h],
         }
+    }
+
+    /*Eine Methode die Velocity setzt/updated
+Eine Methode die alle Partikel des Objects zurückgibt (für Rendering)
+Evtl. eine Methode die die Position des gesamten Objects updated (bewegt alle Partikel mit)
+
+     */
+
+    pub fn calc_object_mass(&mut self) -> f32{
+        let mut sum_mass:f32 = 0.0;
+        for i in 0..self.object_h {
+            for j in 0..self.object_w {
+                let particle : &Particle = &self.object_grid[i][j].0;
+                sum_mass += particle.mass;
+            }
+        } self.total_object_mass = sum_mass;
+        sum_mass
+    }
+    pub fn get_object_mass(&self) -> f32{
+        self.total_object_mass
     }
 }
 

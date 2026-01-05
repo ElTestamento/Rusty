@@ -204,38 +204,40 @@ impl Particle {
     }
 }
 
-/*pub struct Object {
+pub struct Object {
     object_id : i32,
     position : [f32;2],
     velocity : [f32;2],
     mass : f32,
     is_solid: bool,
-    body_heigth : i32,
-    body_width : i32,
+    h : i32,
+    w : i32,
     grid : Vec<Vec<(bool, f32, f32)>>,
 
     }
 impl Object {
-    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, is_solid: bool, height: i32, width: i32) -> Particle {
+    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, is_solid: bool, h: i32, w: i32) -> Object {
         println!("Erschaffe neues Partikel");
-        Particle {
+        Object {
             object_id: id,
             position: position,
             velocity: velocity,
             mass: mass,
             is_solid: is_solid,
-            body_heigth: heigth,
-            body_width: width,
+            h: h,
+            w: w,
             grid: vec![vec![(false, 0.0, 0.0); w]; h],
         }
-    }*/
+    }
+}
 
 //HIER GEHTS WEITER: FUNKTIONALITÖT DES BOCK-OBJEKTS EINBAUEN!''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
     pub struct World {
         pub height: usize,
         pub width: usize,
         pub grid: Vec<Vec<(bool, f32, f32)>>,
-    }
+        }
+
 
     impl World {
         pub fn new(h: usize, w: usize) -> World {

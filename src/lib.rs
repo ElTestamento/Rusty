@@ -215,7 +215,7 @@ pub struct Object {
 
     }
 impl Object {
-    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, is_solid: bool, h: usize, w: usize, prtl : Particle) -> Object {
+    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, is_solid: bool, h: usize, w: usize, prtl: Particle) -> Object {
         println!("Erschaffe neues Objekt");
         Object {
             object_id: id,
@@ -227,13 +227,42 @@ impl Object {
             object_grid: vec![vec![(prtl, 0.0, 0.0); w]; h],
         }
     }
+    pub fn update_object_position(&mut self, world: &mut World) {
+        world.clear_occupation_on_position(self.position);
+        world.clear_mass_on_position(self.position);
+        for i in 0..2 {
+            self.position[i] += self.velocity[i];
+        }
+        world.update_occupation_on_position(self.position);
+        world.update_mass_on_position(self.position, self.total_object_mass);
+    }
 
-    /*Eine Methode die Velocity setzt/updated
-Eine Methode die alle Partikel des Objects zurückgibt (für Rendering)
+    pub fn get_object_elements(&self) -> Vec<&Particle> {
+        let mut particles = Vec::new();
+        for i in 0..self.object_h {
+            for j in 0..self.object_w {
+                particles.push(&self.object_grid[i][j].0);
+            }
+        }particles
+    }
+    pub fn get_object_velocity(&self) -> [f32; 2] {
+        self.velocity
+    }
+    pub fn update_object_velocity(&mut self, gravity: [f32; 2], world: &World) {
+        let next_y = self.position[1] + self.velocity[1] + gravity[1];
+        let check_y = if next_y < 0.0 { 0.0 } else { next_y };
+
+        if world.give_occupation_on_position(self.position[0] as usize, check_y as usize) {
+            self.velocity[1] = 0.0;
+        } else if next_y < 0.0 {
+            self.velocity[1] = -self.position[1];
+        } else {
+            self.velocity[1] += gravity[1];
+        }
+    }
+/*
 Evtl. eine Methode die die Position des gesamten Objects updated (bewegt alle Partikel mit)
-
-     */
-
+ */
     pub fn calc_object_mass(&mut self) -> f32{
         let mut sum_mass:f32 = 0.0;
         for i in 0..self.object_h {
@@ -249,7 +278,6 @@ Evtl. eine Methode die die Position des gesamten Objects updated (bewegt alle Pa
     }
 }
 
-//HIER GEHTS WEITER: FUNKTIONALITÖT DES BOCK-OBJEKTS EINBAUEN!''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
     pub struct World {
         pub height: usize,
         pub width: usize,

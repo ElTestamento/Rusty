@@ -210,14 +210,14 @@ pub struct Object {
     velocity : [f32;2],
     mass : f32,
     is_solid: bool,
-    h : i32,
-    w : i32,
+    h : usize,
+    w : usize,
     grid : Vec<Vec<(bool, f32, f32)>>,
 
     }
 impl Object {
-    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, is_solid: bool, h: i32, w: i32) -> Object {
-        println!("Erschaffe neues Partikel");
+    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, is_solid: bool, h: usize, w: usize) -> Object {
+        println!("Erschaffe neues Objekt");
         Object {
             object_id: id,
             position: position,

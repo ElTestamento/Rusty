@@ -1,6 +1,5 @@
 use bevy::prelude::*;
-use std::collections::HashSet;
-use world::{Particle as SimParticle, World as SimWorld};
+use world::{Particle as SimParticle, Object as SimObject, World as SimWorld};
 
 const GRID_WIDTH: usize = 40;
 const GRID_HEIGHT: usize = 30;
@@ -11,10 +10,18 @@ const CELL_SIZE: f32 = 20.0;
 #[derive(Component)]
 struct ParticleSprite(usize);
 
+#[derive(Component)]
+struct ObjectSprite {
+    object_idx: usize,
+    grid_i: usize,
+    grid_j: usize,
+}
+
 #[derive(Resource)]
 struct Simulation {
     world: SimWorld,
     particles: Vec<SimParticle>,
+    objects: Vec<SimObject>,
     gravity: [f32; 2],
 }
 
@@ -28,7 +35,7 @@ struct Timers {
 struct ParticleCounter(i32);
 
 #[derive(Resource)]
-struct BlockCounter(i32);
+struct ObjectCounter(i32);
 
 // === HELPER FUNKTIONEN ===
 
@@ -69,40 +76,6 @@ fn spawn_particle_sprite(commands: &mut Commands, x: f32, y: f32, color: Color, 
     ));
 }
 
-fn find_blocked_blocks(particles: &[SimParticle], world: &SimWorld) -> HashSet<i32> {
-    let mut blocked = HashSet::new();
-
-    for p in particles {
-        let block_id = match p.block_id {
-            Some(id) => id,
-            None => continue,
-        };
-
-        let x = p.position[0] as i32;
-        let y = p.position[1] as i32;
-
-        // Am Boden?
-        if y <= 0 {
-            blocked.insert(block_id);
-            continue;
-        }
-
-        // Etwas darunter?
-        if world.give_occupation_on_position(x as usize, (y - 1) as usize) {
-            let same_block = particles.iter().any(|other| {
-                other.block_id == Some(block_id)
-                    && other.position[0] as i32 == x
-                    && other.position[1] as i32 == y - 1
-            });
-            if !same_block {
-                blocked.insert(block_id);
-            }
-        }
-    }
-
-    blocked
-}
-
 // === MAIN ===
 
 fn main() {
@@ -118,6 +91,7 @@ fn main() {
         .insert_resource(Simulation {
             world: SimWorld::new(GRID_HEIGHT, GRID_WIDTH),
             particles: Vec::new(),
+            objects: Vec::new(),
             gravity: [0.0, -1.0],
         })
         .insert_resource(Timers {
@@ -125,9 +99,9 @@ fn main() {
             spawn: Timer::from_seconds(0.08, TimerMode::Repeating),
         })
         .insert_resource(ParticleCounter(0))
-        .insert_resource(BlockCounter(0))
+        .insert_resource(ObjectCounter(0))
         .add_systems(Startup, setup)
-        .add_systems(Update, (spawn_particles, spawn_heavy_block, run_simulation, update_sprites))
+        .add_systems(Update, (spawn_particles, spawn_object, run_simulation, update_sprites, update_object_sprites))
         .run();
 }
 
@@ -195,11 +169,10 @@ fn spawn_particles(
     spawn_particle_sprite(&mut commands, spawn_x as f32, spawn_y as f32, sand_color, 1.0, idx);
 }
 
-fn spawn_heavy_block(
+fn spawn_object(
     mut commands: Commands,
     mut sim: ResMut<Simulation>,
-    mut counter: ResMut<ParticleCounter>,
-    mut block_counter: ResMut<BlockCounter>,
+    mut object_counter: ResMut<ObjectCounter>,
     mouse_button: Res<Input<MouseButton>>,
     windows: Query<&Window>,
 ) {
@@ -216,46 +189,70 @@ fn spawn_heavy_block(
     let grid_x = (cursor_pos.x / CELL_SIZE) as i32;
     let grid_y = (GRID_HEIGHT as f32 - cursor_pos.y / CELL_SIZE) as i32;
 
-    block_counter.0 += 1;
-    let current_block_id = block_counter.0;
+    // Grenzen prüfen
+    if grid_x < 0 || grid_x >= GRID_WIDTH as i32 - 2 || grid_y < 0 || grid_y >= GRID_HEIGHT as i32 - 2 {
+        return;
+    }
 
-    let block_color = Color::rgb(0.4, 0.2, 0.1);
-
-    for dx in -1..=1 {
-        for dy in -1..=1 {
-            let x = grid_x + dx;
-            let y = grid_y + dy;
-
-            // Grenzen prüfen
-            if x < 0 || x >= GRID_WIDTH as i32 || y < 0 || y >= GRID_HEIGHT as i32 {
-                continue;
+    // Prüfen ob Platz frei ist (3x3)
+    for di in 0..3 {
+        for dj in 0..3 {
+            if sim.world.give_occupation_on_position((grid_x + dj) as usize, (grid_y + di) as usize) {
+                return;
             }
-
-            // Schon belegt?
-            if sim.world.give_occupation_on_position(x as usize, y as usize) {
-                continue;
-            }
-
-            counter.0 += 1;
-
-            let particle = SimParticle::new_solid(
-                counter.0,
-                [x as f32, y as f32],
-                100.0,
-                current_block_id,
-            );
-
-            sim.world.update_occupation_on_position(particle.position);
-            sim.world.update_mass_on_position(particle.position, particle.mass);
-
-            let idx = sim.particles.len();
-            sim.particles.push(particle);
-
-            spawn_particle_sprite(&mut commands, x as f32, y as f32, block_color, 2.0, idx);
         }
     }
 
-    println!("Block {} bei ({}, {}) gespawnt!", current_block_id, grid_x, grid_y);
+    object_counter.0 += 1;
+    let obj_id = object_counter.0;
+
+    // Object erstellen (3x3, Masse 90 = 10 pro Partikel)
+    let object = SimObject::new(
+        obj_id,
+        [grid_x as f32, grid_y as f32],
+        [0.0, 0.0],
+        90.0,
+        3,
+        3,
+    );
+
+    // World updaten für alle Partikel des Objects
+    for particle in object.get_object_elements() {
+        sim.world.update_occupation_on_position(particle.position);
+        sim.world.update_mass_on_position(particle.position, particle.mass);
+    }
+
+    let obj_idx = sim.objects.len();
+    sim.objects.push(object);
+
+    // Sprites für jedes Partikel im Object spawnen
+    let block_color = Color::rgb(0.4, 0.2, 0.1);
+    for i in 0..3 {
+        for j in 0..3 {
+            let px = grid_x as f32 + j as f32;
+            let py = grid_y as f32 + i as f32;
+            let (screen_x, screen_y) = grid_to_screen(px, py);
+
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: block_color,
+                        custom_size: Some(Vec2::new(CELL_SIZE - 1.0, CELL_SIZE - 1.0)),
+                        ..default()
+                    },
+                    transform: Transform::from_xyz(screen_x, screen_y, 2.0),
+                    ..default()
+                },
+                ObjectSprite {
+                    object_idx: obj_idx,
+                    grid_i: i,
+                    grid_j: j,
+                },
+            ));
+        }
+    }
+
+    println!("Object {} bei ({}, {}) gespawnt!", obj_id, grid_x, grid_y);
 }
 
 // === SIMULATION ===
@@ -273,29 +270,30 @@ fn run_simulation(
 
     sim.world.calc_pressure_on_all_position();
 
-    let blocked = find_blocked_blocks(&sim.particles, &sim.world);
     let gravity = sim.gravity;
 
-    // Hier destructuren!
+    // Particles updaten
     let Simulation { world, particles, .. } = &mut *sim;
 
-    // Velocity + Position updaten
     for p in particles.iter_mut() {
         p.update_velocity(gravity, world);
         p.update_position(world);
     }
 
-    // Pressure resolven
     for p in particles.iter_mut() {
         p.resolve_pressure(world);
     }
 
-    // Fallen lassen
     for p in particles.iter_mut() {
-        let is_blocked = p.block_id.map(|id| blocked.contains(&id)).unwrap_or(false);
-        if !is_blocked {
-            p.fall_down(world);
-        }
+        p.fall_down(world);
+    }
+
+    // Objects updaten
+    let Simulation { world, objects, .. } = &mut *sim;
+
+    for obj in objects.iter_mut() {
+        obj.update_object_velocity(gravity, world);
+        obj.update_object_position(world);
     }
 }
 
@@ -307,6 +305,22 @@ fn update_sprites(
 ) {
     for (particle_sprite, mut transform) in query.iter_mut() {
         let particle = &sim.particles[particle_sprite.0];
+        let (screen_x, screen_y) = grid_to_screen(particle.position[0], particle.position[1]);
+        transform.translation.x = screen_x;
+        transform.translation.y = screen_y;
+    }
+}
+
+fn update_object_sprites(
+    sim: Res<Simulation>,
+    mut query: Query<(&ObjectSprite, &mut Transform)>,
+) {
+    for (obj_sprite, mut transform) in query.iter_mut() {
+        if obj_sprite.object_idx >= sim.objects.len() {
+            continue;
+        }
+        let object = &sim.objects[obj_sprite.object_idx];
+        let particle = &object.get_object_elements()[obj_sprite.grid_i * 3 + obj_sprite.grid_j];
         let (screen_x, screen_y) = grid_to_screen(particle.position[0], particle.position[1]);
         transform.translation.x = screen_x;
         transform.translation.y = screen_y;

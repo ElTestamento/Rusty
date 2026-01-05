@@ -203,7 +203,6 @@ impl Particle {
         }
     }
 }
-
 pub struct Object {
     object_id : i32,
     position : [f32;2],
@@ -213,30 +212,68 @@ pub struct Object {
     object_w : usize,
     object_grid : Vec<Vec<(Particle, f32, f32)>>,
 
-    }
+}
 impl Object {
-    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, is_solid: bool, h: usize, w: usize, prtl: Particle) -> Object {
+    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, h: usize, w: usize) -> Object {
         println!("Erschaffe neues Objekt");
+
+        // Grid aufbauen
+        let mut object_grid: Vec<Vec<(Particle, f32, f32)>> = Vec::new();
+
+        for i in 0..h {
+            let mut row: Vec<(Particle, f32, f32)> = Vec::new();
+            for j in 0..w {
+                // Jedes Partikel bekommt eigene Position (Anker + Offset)
+                let particle_pos = [
+                    position[0] + j as f32,
+                    position[1] + i as f32,
+                ];
+                let particle = Particle::new_solid(
+                    id * 100 + (i * w + j) as i32,  // Eindeutige ID pro Partikel
+                    particle_pos,
+                    mass / (h * w) as f32,          // Masse aufteilen
+                    id,
+                );
+                row.push((particle, 0.0, 0.0));
+            }
+            object_grid.push(row);
+        }
         Object {
             object_id: id,
-            position: position,
-            velocity: velocity,
+            position,
+            velocity,
             total_object_mass: mass,
             object_h: h,
             object_w: w,
-            object_grid: vec![vec![(prtl, 0.0, 0.0); w]; h],
+            object_grid,
         }
     }
     pub fn update_object_position(&mut self, world: &mut World) {
-        world.clear_occupation_on_position(self.position);
-        world.clear_mass_on_position(self.position);
-        for i in 0..2 {
-            self.position[i] += self.velocity[i];
+        // Alte Positionen clearen
+        for i in 0..self.object_h {
+            for j in 0..self.object_w {
+                let particle = &self.object_grid[i][j].0;
+                world.clear_occupation_on_position(particle.position);
+                world.clear_mass_on_position(particle.position);
+            }
         }
-        world.update_occupation_on_position(self.position);
-        world.update_mass_on_position(self.position, self.total_object_mass);
-    }
 
+        // Object-Position updaten
+        self.position[0] += self.velocity[0];
+        self.position[1] += self.velocity[1];
+
+        // Partikel-Positionen neu berechnen + World updaten
+        for i in 0..self.object_h {
+            for j in 0..self.object_w {
+                let particle = &mut self.object_grid[i][j].0;
+                particle.position[0] = self.position[0] + j as f32;
+                particle.position[1] = self.position[1] + i as f32;
+
+                world.update_occupation_on_position(particle.position);
+                world.update_mass_on_position(particle.position, particle.mass);
+            }
+        }
+    }
     pub fn get_object_elements(&self) -> Vec<&Particle> {
         let mut particles = Vec::new();
         for i in 0..self.object_h {
@@ -260,9 +297,7 @@ impl Object {
             self.velocity[1] += gravity[1];
         }
     }
-/*
-Evtl. eine Methode die die Position des gesamten Objects updated (bewegt alle Partikel mit)
- */
+
     pub fn calc_object_mass(&mut self) -> f32{
         let mut sum_mass:f32 = 0.0;
         for i in 0..self.object_h {
@@ -278,72 +313,72 @@ Evtl. eine Methode die die Position des gesamten Objects updated (bewegt alle Pa
     }
 }
 
-    pub struct World {
-        pub height: usize,
-        pub width: usize,
-        pub grid: Vec<Vec<(bool, f32, f32)>>,
+pub struct World {
+    pub height: usize,
+    pub width: usize,
+    pub grid: Vec<Vec<(bool, f32, f32)>>,
+}
+
+
+impl World {
+    pub fn new(h: usize, w: usize) -> World {
+        World {
+            height: h,
+            width: w,
+            grid: vec![vec![(false, 0.0, 0.0); w]; h],
         }
+    }
 
-
-    impl World {
-        pub fn new(h: usize, w: usize) -> World {
-            World {
-                height: h,
-                width: w,
-                grid: vec![vec![(false, 0.0, 0.0); w]; h],
-            }
-        }
-
-        pub fn give_world(&self) {
-            for i in 0..self.height {
-                for j in 0..self.width {
-                    println!(
-                        "An X_{}/Y_{}:Occupation:{}/Masse:{}/Druck:{}",
-                        j, i, self.grid[i][j].0, self.grid[i][j].1, self.grid[i][j].2
-                    );
-                }
-            }
-        }
-
-        pub fn give_pressure_on_position(&self, x: usize, y: usize) -> f32 {
-            self.grid[y][x].2
-        }
-
-        pub fn give_occupation_on_position(&self, x: usize, y: usize) -> bool {
-            self.grid[y][x].0
-        }
-
-        pub fn update_mass_on_position(&mut self, partl_koord: [f32; 2], mass: f32) {
-            let x = partl_koord[0] as usize;
-            let y = partl_koord[1] as usize;
-            self.grid[y][x].1 = mass;
-        }
-
-        pub fn update_occupation_on_position(&mut self, partl_koord: [f32; 2]) {
-            let x = partl_koord[0] as usize;
-            let y = partl_koord[1] as usize;
-            self.grid[y][x].0 = true;
-        }
-
-        pub fn clear_occupation_on_position(&mut self, partl_koord: [f32; 2]) {
-            let x = partl_koord[0] as usize;
-            let y = partl_koord[1] as usize;
-            self.grid[y][x].0 = false;
-        }
-
-        pub fn clear_mass_on_position(&mut self, partl_koord: [f32; 2]) {
-            let x = partl_koord[0] as usize;
-            let y = partl_koord[1] as usize;
-            self.grid[y][x].1 = 0.0;
-        }
-
-        pub fn calc_pressure_on_all_position(&mut self) {
+    pub fn give_world(&self) {
+        for i in 0..self.height {
             for j in 0..self.width {
-                let mut sum_pressure: f32 = 0.0;
-                for i in (0..self.height).rev() {
-                    sum_pressure += self.grid[i][j].1;
-                    self.grid[i][j].2 = sum_pressure;
-                }
+                println!(
+                    "An X_{}/Y_{}:Occupation:{}/Masse:{}/Druck:{}",
+                    j, i, self.grid[i][j].0, self.grid[i][j].1, self.grid[i][j].2
+                );
             }
         }
     }
+
+    pub fn give_pressure_on_position(&self, x: usize, y: usize) -> f32 {
+        self.grid[y][x].2
+    }
+
+    pub fn give_occupation_on_position(&self, x: usize, y: usize) -> bool {
+        self.grid[y][x].0
+    }
+
+    pub fn update_mass_on_position(&mut self, partl_koord: [f32; 2], mass: f32) {
+        let x = partl_koord[0] as usize;
+        let y = partl_koord[1] as usize;
+        self.grid[y][x].1 = mass;
+    }
+
+    pub fn update_occupation_on_position(&mut self, partl_koord: [f32; 2]) {
+        let x = partl_koord[0] as usize;
+        let y = partl_koord[1] as usize;
+        self.grid[y][x].0 = true;
+    }
+
+    pub fn clear_occupation_on_position(&mut self, partl_koord: [f32; 2]) {
+        let x = partl_koord[0] as usize;
+        let y = partl_koord[1] as usize;
+        self.grid[y][x].0 = false;
+    }
+
+    pub fn clear_mass_on_position(&mut self, partl_koord: [f32; 2]) {
+        let x = partl_koord[0] as usize;
+        let y = partl_koord[1] as usize;
+        self.grid[y][x].1 = 0.0;
+    }
+
+    pub fn calc_pressure_on_all_position(&mut self) {
+        for j in 0..self.width {
+            let mut sum_pressure: f32 = 0.0;
+            for i in (0..self.height).rev() {
+                sum_pressure += self.grid[i][j].1;
+                self.grid[i][j].2 = sum_pressure;
+            }
+        }
+    }
+}

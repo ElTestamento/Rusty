@@ -1,13 +1,13 @@
 use rand::seq::SliceRandom;
 
+//Struktur Partikel
 #[derive(Debug, Clone)]
 pub struct Particle {
     pub id: i32,
     pub position: [f32; 2],
     pub velocity: [f32; 2],
     pub mass: f32,
-    pub is_solid: bool,
-    pub block_id: Option<i32>,
+
 }
 
 impl Particle {
@@ -18,22 +18,9 @@ impl Particle {
             position : position,
             velocity : velocity,
             mass : mass,
-            is_solid: false,
-            block_id: None,
         }
     }
 
-    pub fn new_solid(id: i32, position: [f32; 2], mass: f32, block_id: i32) -> Particle {
-        println!("Erschaffe festen Block");
-        Particle {
-            id,
-            position,
-            velocity: [0.0, 0.0],
-            mass,
-            is_solid: true,
-            block_id: Some(block_id),
-        }
-    }
 
     pub fn check_way(&self, world: &World) -> Option<(f32, i32, i32)> {
         let own_x_pos = self.position[0] as i32;
@@ -95,9 +82,6 @@ impl Particle {
     }
 
     pub fn resolve_pressure(&mut self, world: &mut World) {
-        if self.is_solid {
-            return;
-        }
 
         let own_x = self.position[0] as usize;
         let own_y = self.position[1] as usize;
@@ -136,11 +120,6 @@ impl Particle {
             self.position[1] -= 1.0;
             world.update_occupation_on_position(self.position);
             world.update_mass_on_position(self.position, self.mass);
-            return;
-        }
-
-        // Solids fallen NICHT diagonal
-        if self.is_solid {
             return;
         }
 
@@ -203,6 +182,8 @@ impl Particle {
         }
     }
 }
+
+//Struktur Objekt
 pub struct Object {
     object_id : i32,
     position : [f32;2],
@@ -228,11 +209,11 @@ impl Object {
                     position[0] + j as f32,
                     position[1] + i as f32,
                 ];
-                let particle = Particle::new_solid(
-                    id * 100 + (i * w + j) as i32,  // Eindeutige ID pro Partikel
-                    particle_pos,
-                    mass / (h * w) as f32,          // Masse aufteilen
-                    id,
+                let particle = Particle::new(
+                    id * 100 + (i * w + j) as i32,  // id
+                    particle_pos,                     // position
+                    [0.0, 0.0],                       // velocity (explizit)
+                    mass / (h * w) as f32,           // mass
                 );
                 row.push((particle, 0.0, 0.0));
             }
@@ -313,6 +294,7 @@ impl Object {
     }
 }
 
+//Struktur Welt
 pub struct World {
     pub height: usize,
     pub width: usize,

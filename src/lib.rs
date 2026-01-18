@@ -1,26 +1,97 @@
 use rand::seq::SliceRandom;
 
+/// Materialtypen für Partikel.
+///
+/// Jede Zelle im Grid hat Volumen = 1 (architektonische Konstante).
+/// Daher gilt: Masse = Dichte × 1 = Dichte.
+/// Die density()-Werte SIND die Massen pro Partikel.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MaterialTyp {
+    Sand,
+    Stein,
+    Metall,
+    Luft,
+    Wasser,
+    Holz,
+}
+
+impl MaterialTyp {
+    /// Bindungsstärke zwischen benachbarten Partikeln.
+    /// Höher = schwerer zu brechen.
+    pub fn binding_strength(&self) -> f32 {
+        match self {
+            MaterialTyp::Sand => 2.0,      // Lose Körner, kaum Bindung
+            MaterialTyp::Stein => 80.0,    // Starke kristalline Bindung
+            MaterialTyp::Metall => 200.0,  // Sehr starke metallische Bindung
+            MaterialTyp::Luft => 0.0,      // Keine Bindung, Gas
+            MaterialTyp::Wasser => 0.0,    // Keine Bindung, Flüssigkeit
+            MaterialTyp::Holz => 40.0,     // Mittlere Faserbindung
+        }
+    }
+
+    /// Dichte des Materials.
+    /// Da Zellvolumen = 1, entspricht dieser Wert direkt der Masse.
+    /// Werte relativ zu Wasser (Wasser = 1.0).
+    pub fn density(&self) -> f32 {
+        match self {
+            MaterialTyp::Sand => 1.5,      // Schwerer als Wasser, sinkt
+            MaterialTyp::Stein => 2.5,     // Granit-ähnlich
+            MaterialTyp::Metall => 8.0,    // Eisen-ähnlich
+            MaterialTyp::Luft => 0.001,    // Fast masselos, aber nicht 0
+            MaterialTyp::Wasser => 1.0,    // Referenzwert
+            MaterialTyp::Holz => 0.6,      // Leichter als Wasser, schwimmt
+        }
+    }
+
+    /// Ist das Material fest?
+    /// false = fließt/strömt (Flüssigkeit, Gas)
+    pub fn is_solid(&self) -> bool {
+        match self {
+            MaterialTyp::Sand => true,     // Fest, aber granular
+            MaterialTyp::Stein => true,    // Fest
+            MaterialTyp::Metall => true,   // Fest
+            MaterialTyp::Luft => false,    // Gas
+            MaterialTyp::Wasser => false,  // Flüssig
+            MaterialTyp::Holz => true,     // Fest
+        }
+    }
+    
+    /// Farbe des Materials als (R, G, B) Werte zwischen 0.0 und 1.0.
+    /// Wird vom Renderer zu seiner nativen Farbdarstellung konvertiert.
+    /// lib.rs bleibt damit unabhängig von Bevy.
+    pub fn color(&self) -> (f32, f32, f32) {
+        match self {
+            MaterialTyp::Sand => (0.9, 0.75, 0.4),      // Sandgelb/Beige
+            MaterialTyp::Stein => (0.5, 0.5, 0.5),     // Neutrales Grau
+            MaterialTyp::Metall => (0.7, 0.75, 0.8),   // Kühles Silber
+            MaterialTyp::Luft => (0.9, 0.95, 1.0),     // Fast weiß, leicht bläulich
+            MaterialTyp::Wasser => (0.2, 0.5, 0.8),    // Klares Blau
+            MaterialTyp::Holz => (0.55, 0.35, 0.15),   // Warmes Braun
+        }
+    }
+}
+
 //Struktur Partikel
 #[derive(Debug, Clone)]
 pub struct Particle {
     pub id: i32,
     pub position: [f32; 2],
     pub velocity: [f32; 2],
-    pub mass: f32,
-
+    pub material : MaterialTyp
 }
-
 impl Particle {
-    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32) -> Particle {
+    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], material : MaterialTyp) -> Particle {
         println!("Erschaffe neues Partikel");
         Particle {
             id : id,
             position : position,
             velocity : velocity,
-            mass : mass,
+            material: material,
         }
     }
-
+    pub fn mass(&self) -> f32{
+        self.material.density()
+    }
 
     pub fn check_way(&self, world: &World) -> Option<(f32, i32, i32)> {
         let own_x_pos = self.position[0] as i32;
@@ -87,7 +158,7 @@ impl Particle {
         let own_y = self.position[1] as usize;
         let own_pressure = world.give_pressure_on_position(own_x, own_y);
 
-        if own_pressure <= self.mass {
+        if own_pressure <= self.mass() {
             return;
         }
 
@@ -99,7 +170,7 @@ impl Particle {
                     self.position[0] = target_x as f32;
                     self.position[1] = target_y as f32;
                     world.update_occupation_on_position(self.position);
-                    world.update_mass_on_position(self.position, self.mass);
+                    world.update_mass_on_position(self.position, self.mass());
                 }
             }
         }
@@ -119,7 +190,7 @@ impl Particle {
             world.clear_mass_on_position(self.position);
             self.position[1] -= 1.0;
             world.update_occupation_on_position(self.position);
-            world.update_mass_on_position(self.position, self.mass);
+            world.update_mass_on_position(self.position, self.mass());
             return;
         }
 
@@ -130,7 +201,7 @@ impl Particle {
             self.position[0] -= 1.0;
             self.position[1] -= 1.0;
             world.update_occupation_on_position(self.position);
-            world.update_mass_on_position(self.position, self.mass);
+            world.update_mass_on_position(self.position, self.mass());
             return;
         }
 
@@ -141,7 +212,7 @@ impl Particle {
             self.position[0] += 1.0;
             self.position[1] -= 1.0;
             world.update_occupation_on_position(self.position);
-            world.update_mass_on_position(self.position, self.mass);
+            world.update_mass_on_position(self.position, self.mass());
         }
     }
 
@@ -154,7 +225,7 @@ impl Particle {
     }
 
     pub fn get_impuls(&self) -> [f32; 2] {
-        [self.velocity[0] * self.mass, self.velocity[1] * self.mass]
+        [self.velocity[0] * self.mass(), self.velocity[1] * self.mass()]
     }
 
     pub fn update_position(&mut self, world: &mut World) {
@@ -166,7 +237,7 @@ impl Particle {
         }
 
         world.update_occupation_on_position(self.position);
-        world.update_mass_on_position(self.position, self.mass);
+        world.update_mass_on_position(self.position, self.mass());
     }
 
     pub fn update_velocity(&mut self, gravity: [f32; 2], world: &World) {
@@ -185,17 +256,17 @@ impl Particle {
 
 //Struktur Objekt
 pub struct Object {
-    object_id : i32,
-    position : [f32;2],
-    velocity : [f32;2],
-    total_object_mass : f32,
-    object_h : usize,
-    object_w : usize,
-    object_grid : Vec<Vec<(Particle, f32, f32)>>,
-
+    object_id: i32,           // Eindeutige ID für dieses Objekt
+    position: [f32; 2],       // ANKER-Position (linke untere Ecke)
+    velocity: [f32; 2],       // Geschwindigkeit des GESAMTEN Objekts
+    total_object_mass: f32,   // Gesamtmasse
+    object_h: usize,          // Höhe in Zellen (z.B. 3)
+    object_w: usize,          // Breite in Zellen (z.B. 3)
+    object_grid: Vec<Vec<(Particle, f32, f32)>>,  // Das Mini-Grid
 }
+
 impl Object {
-    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], mass: f32, h: usize, w: usize) -> Object {
+    pub fn new(id: i32, position: [f32; 2], velocity: [f32; 2], material: MaterialTyp, h: usize, w: usize) -> Object {
         println!("Erschaffe neues Objekt");
 
         // Grid aufbauen
@@ -213,7 +284,7 @@ impl Object {
                     id * 100 + (i * w + j) as i32,  // id
                     particle_pos,                     // position
                     [0.0, 0.0],                       // velocity (explizit)
-                    mass / (h * w) as f32,           // mass
+                    material,           // mass
                 );
                 row.push((particle, 0.0, 0.0));
             }
@@ -223,7 +294,7 @@ impl Object {
             object_id: id,
             position,
             velocity,
-            total_object_mass: mass,
+            total_object_mass: (h * w) as f32 * material.density(),
             object_h: h,
             object_w: w,
             object_grid,
@@ -251,7 +322,7 @@ impl Object {
                 particle.position[1] = self.position[1] + i as f32;
 
                 world.update_occupation_on_position(particle.position);
-                world.update_mass_on_position(particle.position, particle.mass);
+                world.update_mass_on_position(particle.position, particle.mass());
             }
         }
     }
@@ -284,7 +355,7 @@ impl Object {
         for i in 0..self.object_h {
             for j in 0..self.object_w {
                 let particle : &Particle = &self.object_grid[i][j].0;
-                sum_mass += particle.mass;
+                sum_mass += particle.mass();
             }
         } self.total_object_mass = sum_mass;
         sum_mass
@@ -300,7 +371,6 @@ pub struct World {
     pub width: usize,
     pub grid: Vec<Vec<(bool, f32, f32)>>,
 }
-
 
 impl World {
     pub fn new(h: usize, w: usize) -> World {
